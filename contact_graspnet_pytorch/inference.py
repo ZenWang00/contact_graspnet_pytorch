@@ -1,6 +1,7 @@
 import glob
 import os
 import argparse
+from pathlib import Path
 
 import torch
 import numpy as np
@@ -19,6 +20,7 @@ def inference(global_config,
               skip_border_objects=False,
               z_range = [0.2,1.8],
               forward_passes=1,
+              no_vis=False,
               K=None,):
     """
     Predict 6-DoF grasp distribution for given model and input data
@@ -74,13 +76,24 @@ def inference(global_config,
                                                                                        filter_grasps=filter_grasps, 
                                                                                        forward_passes=forward_passes)  
     
-        # Save results
-        np.savez('results/predictions_{}'.format(os.path.basename(p.replace('png','npz').replace('npy','npz'))), 
-                  pc_full=pc_full, pred_grasps_cam=pred_grasps_cam, scores=scores, contact_pts=contact_pts, pc_colors=pc_colors)
+        # Save results next to the input file for easier per-scene management.
+        input_path = Path(p)
+        save_name = f"predictions_{input_path.stem}.npz"
+        save_path = input_path.parent / save_name
+        np.savez(
+            str(save_path),
+            pc_full=pc_full,
+            pred_grasps_cam=pred_grasps_cam,
+            scores=scores,
+            contact_pts=contact_pts,
+            pc_colors=pc_colors,
+        )
+        print(f"Saved prediction file: {save_path}")
 
-        # Visualize results          
-        show_image(rgb, segmap)
-        visualize_grasps(pc_full, pred_grasps_cam, scores, plot_opencv_cam=True, pc_colors=pc_colors)
+        # Visualize results only when GUI is available/desired.
+        if not no_vis:
+            show_image(rgb, segmap)
+            visualize_grasps(pc_full, pred_grasps_cam, scores, plot_opencv_cam=True, pc_colors=pc_colors)
         
     if not glob.glob(input_paths):
         print('No files found: ', input_paths)
@@ -96,6 +109,7 @@ if __name__ == "__main__":
     parser.add_argument('--filter_grasps', action='store_true', default=True,  help='Filter grasp contacts according to segmap.')
     parser.add_argument('--skip_border_objects', action='store_true', default=False,  help='When extracting local_regions, ignore segments at depth map boundary.')
     parser.add_argument('--forward_passes', type=int, default=1,  help='Run multiple parallel forward passes to mesh_utils more potential contact points.')
+    parser.add_argument('--no_vis', action='store_true', default=False, help='Disable visualization windows (useful on headless servers).')
     parser.add_argument('--arg_configs', nargs="*", type=str, default=[], help='overwrite config parameters')
     FLAGS = parser.parse_args()
 
@@ -112,4 +126,5 @@ if __name__ == "__main__":
               skip_border_objects=FLAGS.skip_border_objects,
               z_range=eval(str(FLAGS.z_range)),
               forward_passes=FLAGS.forward_passes,
+              no_vis=FLAGS.no_vis,
               K=eval(str(FLAGS.K)))
